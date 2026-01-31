@@ -17,11 +17,10 @@ Weirwood aims to build a comprehensive, trustworthy database of NSCLC treatment 
 
 | Component | Technology |
 |-----------|------------|
-| Database | PostgreSQL |
+| Database | PostgreSQL (Supabase) |
 | Backend | FastAPI (Python) |
 | Frontend | Next.js 14 |
 | Styling | Tailwind CSS |
-| Hosting | Docker / Vercel + Railway |
 
 ## Project Structure
 
@@ -50,68 +49,33 @@ cancer_matching_engine/
 ├── scripts/
 │   ├── ingest_trials.py         # ClinicalTrials.gov ingestion
 │   ├── ingest_treatments.py     # OpenFDA ingestion
-│   ├── seed_centers.py          # NCI centers seed data
-│   └── requirements.txt
-├── docker-compose.yml
+│   └── seed_centers.py          # NCI centers seed data
 └── README.md
 ```
 
 ## Quick Start
 
-### Using Docker (Recommended)
-
-1. **Start all services**:
-   ```bash
-   docker-compose up -d
-   ```
-
-2. **Run data ingestion scripts** (first time only):
-   ```bash
-   # Install script dependencies
-   pip install -r scripts/requirements.txt
-
-   # Seed cancer centers
-   python scripts/seed_centers.py
-
-   # Ingest treatments from OpenFDA
-   python scripts/ingest_treatments.py
-
-   # Ingest trials from ClinicalTrials.gov (takes a few minutes)
-   python scripts/ingest_trials.py
-   ```
-
-3. **Access the application**:
-   - Frontend: http://localhost:3000
-   - API: http://localhost:8000
-   - API Docs: http://localhost:8000/docs
-
-### Manual Setup
-
-#### Prerequisites
+### Prerequisites
 - Python 3.11+
 - Node.js 20+
-- PostgreSQL 15+
+- Supabase project (database is already populated)
 
-#### Backend Setup
+### Backend Setup
 
 ```bash
 cd backend
 
-# Create virtual environment
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-
 # Install dependencies
 pip install -r requirements.txt
 
-# Set environment variables
-export DATABASE_URL="postgresql://postgres:postgres@localhost:5432/weirwood"
+# Create .env file with your Supabase connection string
+echo 'DATABASE_URL=postgresql://postgres:[PASSWORD]@db.[PROJECT].supabase.co:5432/postgres' > .env
 
 # Run the server
 uvicorn app.main:app --reload
 ```
 
-#### Frontend Setup
+### Frontend Setup
 
 ```bash
 cd frontend
@@ -119,21 +83,14 @@ cd frontend
 # Install dependencies
 npm install
 
-# Set environment variables
-export NEXT_PUBLIC_API_URL="http://localhost:8000"
-
 # Run the development server
 npm run dev
 ```
 
-#### Database Setup
-
-```bash
-# Create the database
-createdb weirwood
-
-# Tables are created automatically when the backend starts
-```
+### Access the Application
+- Frontend: http://localhost:3000
+- API: http://localhost:8000
+- API Docs: http://localhost:8000/docs
 
 ## API Endpoints
 
@@ -171,39 +128,14 @@ createdb weirwood
 ## Environment Variables
 
 ### Backend
-- `DATABASE_URL` - PostgreSQL connection string (default: `postgresql://postgres:postgres@localhost:5432/weirwood`)
+- `DATABASE_URL` - Supabase PostgreSQL connection string
 
 ### Frontend
 - `NEXT_PUBLIC_API_URL` - Backend API URL (default: `http://localhost:8000`)
 
-## Development
-
-### Running Tests
-```bash
-# Backend tests
-cd backend
-pytest
-
-# Frontend tests
-cd frontend
-npm test
-```
-
-### Code Formatting
-```bash
-# Backend
-cd backend
-black .
-ruff check .
-
-# Frontend
-cd frontend
-npm run lint
-```
-
 ## Data Refresh
 
-To refresh data from external sources:
+To refresh data from external sources, set `DATABASE_URL` and run:
 
 ```bash
 # Refresh trials (daily)
