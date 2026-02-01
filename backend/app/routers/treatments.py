@@ -9,6 +9,17 @@ from app.schemas import TreatmentResponse, TreatmentCreate, PaginatedResponse
 router = APIRouter(prefix="/treatments", tags=["treatments"])
 
 
+@router.get("/classes/list", response_model=list[str])
+def list_drug_classes(db: Session = Depends(get_db)):
+    classes = (
+        db.query(Treatment.drug_class)
+        .filter(Treatment.drug_class.isnot(None))
+        .distinct()
+        .all()
+    )
+    return [c[0] for c in classes if c[0]]
+
+
 @router.get("", response_model=PaginatedResponse)
 def list_treatments(
     page: int = Query(1, ge=1),
@@ -52,7 +63,7 @@ def list_treatments(
     )
 
     return PaginatedResponse(
-        items=items,
+        items=[TreatmentResponse.model_validate(item) for item in items],
         total=total,
         page=page,
         page_size=page_size,
@@ -75,14 +86,3 @@ def create_treatment(treatment: TreatmentCreate, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(db_treatment)
     return db_treatment
-
-
-@router.get("/classes/list", response_model=list[str])
-def list_drug_classes(db: Session = Depends(get_db)):
-    classes = (
-        db.query(Treatment.drug_class)
-        .filter(Treatment.drug_class.isnot(None))
-        .distinct()
-        .all()
-    )
-    return [c[0] for c in classes if c[0]]

@@ -9,6 +9,58 @@ from app.schemas import ClinicalTrialResponse, ClinicalTrialCreate, PaginatedRes
 router = APIRouter(prefix="/trials", tags=["trials"])
 
 
+@router.get("/phases/list", response_model=list[str])
+def list_phases(db: Session = Depends(get_db)):
+    phases = (
+        db.query(ClinicalTrial.phase)
+        .filter(ClinicalTrial.phase.isnot(None))
+        .distinct()
+        .all()
+    )
+    return sorted([p[0] for p in phases if p[0]])
+
+
+@router.get("/statuses/list", response_model=list[str])
+def list_statuses(db: Session = Depends(get_db)):
+    statuses = (
+        db.query(ClinicalTrial.status)
+        .filter(ClinicalTrial.status.isnot(None))
+        .distinct()
+        .all()
+    )
+    return [s[0] for s in statuses if s[0]]
+
+
+@router.get("/locations", response_model=list[dict])
+def get_trial_locations(
+    limit: int = Query(500, ge=1, le=1000),
+    db: Session = Depends(get_db),
+):
+    """Get all trial locations for map display"""
+    trials = (
+        db.query(ClinicalTrial.nct_id, ClinicalTrial.title, ClinicalTrial.locations)
+        .filter(ClinicalTrial.locations.isnot(None))
+        .limit(limit)
+        .all()
+    )
+
+    locations = []
+    for trial in trials:
+        if trial.locations:
+            for loc in trial.locations:
+                if loc.get("lat") and loc.get("lng"):
+                    locations.append({
+                        "nct_id": trial.nct_id,
+                        "title": trial.title,
+                        "facility": loc.get("facility"),
+                        "city": loc.get("city"),
+                        "state": loc.get("state"),
+                        "lat": loc.get("lat"),
+                        "lng": loc.get("lng"),
+                    })
+    return locations
+
+
 @router.get("", response_model=PaginatedResponse)
 def list_trials(
     page: int = Query(1, ge=1),
@@ -65,64 +117,12 @@ def list_trials(
     )
 
     return PaginatedResponse(
-        items=items,
+        items=[ClinicalTrialResponse.model_validate(item) for item in items],
         total=total,
         page=page,
         page_size=page_size,
         total_pages=total_pages,
     )
-
-
-@router.get("/phases/list", response_model=list[str])
-def list_phases(db: Session = Depends(get_db)):
-    phases = (
-        db.query(ClinicalTrial.phase)
-        .filter(ClinicalTrial.phase.isnot(None))
-        .distinct()
-        .all()
-    )
-    return sorted([p[0] for p in phases if p[0]])
-
-
-@router.get("/statuses/list", response_model=list[str])
-def list_statuses(db: Session = Depends(get_db)):
-    statuses = (
-        db.query(ClinicalTrial.status)
-        .filter(ClinicalTrial.status.isnot(None))
-        .distinct()
-        .all()
-    )
-    return [s[0] for s in statuses if s[0]]
-
-
-@router.get("/locations", response_model=list[dict])
-def get_trial_locations(
-    limit: int = Query(500, ge=1, le=1000),
-    db: Session = Depends(get_db),
-):
-    """Get all trial locations for map display"""
-    trials = (
-        db.query(ClinicalTrial.nct_id, ClinicalTrial.title, ClinicalTrial.locations)
-        .filter(ClinicalTrial.locations.isnot(None))
-        .limit(limit)
-        .all()
-    )
-
-    locations = []
-    for trial in trials:
-        if trial.locations:
-            for loc in trial.locations:
-                if loc.get("lat") and loc.get("lng"):
-                    locations.append({
-                        "nct_id": trial.nct_id,
-                        "title": trial.title,
-                        "facility": loc.get("facility"),
-                        "city": loc.get("city"),
-                        "state": loc.get("state"),
-                        "lat": loc.get("lat"),
-                        "lng": loc.get("lng"),
-                    })
-    return locations
 
 
 @router.get("/{nct_id}", response_model=ClinicalTrialResponse)

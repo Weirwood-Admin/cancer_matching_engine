@@ -83,7 +83,9 @@ export interface SearchSuggestion {
 }
 
 async function fetchApi<T>(endpoint: string, params?: Record<string, string | number>): Promise<T> {
-  const url = new URL(`${API_BASE}${endpoint}`);
+  const baseUrl = typeof window !== 'undefined' ? API_BASE : 'http://localhost:8000';
+  const url = new URL(`${baseUrl}${endpoint}`);
+
   if (params) {
     Object.entries(params).forEach(([key, value]) => {
       if (value !== undefined && value !== null && value !== '') {
@@ -92,15 +94,20 @@ async function fetchApi<T>(endpoint: string, params?: Record<string, string | nu
     });
   }
 
-  const response = await fetch(url.toString(), {
-    cache: 'no-store',
-  });
+  try {
+    const response = await fetch(url.toString(), {
+      cache: 'no-store',
+    });
 
-  if (!response.ok) {
-    throw new Error(`API error: ${response.status}`);
+    if (!response.ok) {
+      throw new Error(`API error: ${response.status}`);
+    }
+
+    return response.json();
+  } catch (error) {
+    console.error(`Failed to fetch ${endpoint}:`, error);
+    throw error;
   }
-
-  return response.json();
 }
 
 export const api = {

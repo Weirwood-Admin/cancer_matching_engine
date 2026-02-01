@@ -100,3 +100,6 @@ class PaginatedResponse(BaseModel):
     page: int
     page_size: int
     total_pages: int
+
+    class Config:
+        from_attributes = True
