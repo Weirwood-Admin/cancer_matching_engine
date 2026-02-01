@@ -82,6 +82,77 @@ export interface SearchSuggestion {
   type: 'treatment' | 'trial' | 'center';
 }
 
+// Patient Matching Types
+export interface PatientProfile {
+  cancer_type: string;
+  histology: string | null;
+  stage: string | null;
+  biomarkers: Record<string, string[]>;
+  age: number | null;
+  ecog_status: number | null;
+  prior_treatments: string[];
+  brain_metastases: boolean | null;
+  location: string | null;
+}
+
+export interface EligibilityResult {
+  status: 'eligible' | 'ineligible' | 'uncertain';
+  confidence: number;
+  matching_criteria: string[];
+  excluding_criteria: string[];
+  explanation: string;
+}
+
+export interface TreatmentMatch {
+  id: number;
+  generic_name: string;
+  brand_names: string[] | null;
+  drug_class: string | null;
+  mechanism_of_action: string | null;
+  biomarker_requirements: Record<string, string[]> | null;
+  fda_approval_status: string | null;
+  match_reason: string;
+  match_score: number;
+}
+
+export interface TrialMatch {
+  id: number;
+  nct_id: string;
+  title: string | null;
+  phase: string | null;
+  status: string | null;
+  sponsor: string | null;
+  brief_summary: string | null;
+  biomarker_requirements: Record<string, string[]> | null;
+  eligibility: EligibilityResult;
+  study_url: string | null;
+  locations: Array<{
+    facility: string;
+    city: string;
+    state: string;
+    country: string;
+  }> | null;
+}
+
+export interface PatientMatchRequest {
+  description: string;
+  location?: string;
+}
+
+export interface PatientMatchResponse {
+  profile: PatientProfile;
+  treatments: TreatmentMatch[];
+  trials: TrialMatch[];
+  total_treatments: number;
+  total_trials: number;
+  processing_time_ms: number;
+}
+
+export interface ParsedProfileResponse {
+  profile: PatientProfile;
+  raw_extraction: Record<string, unknown>;
+}
+
 async function fetchApi<T>(endpoint: string, params?: Record<string, string | number>): Promise<T> {
   const baseUrl = typeof window !== 'undefined' ? API_BASE : 'http://localhost:8000';
   const url = new URL(`${baseUrl}${endpoint}`);
@@ -106,6 +177,31 @@ async function fetchApi<T>(endpoint: string, params?: Record<string, string | nu
     return response.json();
   } catch (error) {
     console.error(`Failed to fetch ${endpoint}:`, error);
+    throw error;
+  }
+}
+
+async function postApi<T, B>(endpoint: string, body: B): Promise<T> {
+  const baseUrl = typeof window !== 'undefined' ? API_BASE : 'http://localhost:8000';
+  const url = `${baseUrl}${endpoint}`;
+
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(body),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.detail || `API error: ${response.status}`);
+    }
+
+    return response.json();
+  } catch (error) {
+    console.error(`Failed to POST ${endpoint}:`, error);
     throw error;
   }
 }
@@ -187,4 +283,11 @@ export const api = {
 
   searchSuggestions: (q: string, limit?: number) =>
     fetchApi<SearchSuggestion[]>('/search/suggest', { q, limit: limit || 5 }),
+
+  // Patient Matching
+  matchPatient: (request: PatientMatchRequest) =>
+    postApi<PatientMatchResponse, PatientMatchRequest>('/match', request),
+
+  parsePatient: (request: PatientMatchRequest) =>
+    postApi<ParsedProfileResponse, PatientMatchRequest>('/match/parse', request),
 };

@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation';
 
 const navItems = [
   { href: '/', label: 'Home' },
+  { href: '/match', label: 'Find Matches' },
   { href: '/treatments', label: 'Treatments' },
   { href: '/trials', label: 'Clinical Trials' },
   { href: '/centers', label: 'Cancer Centers' },
