@@ -1,6 +1,7 @@
 import logging
 from typing import Any
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 
 from app.models import Treatment, ClinicalTrial
 from app.services.claude_service import evaluate_trial_eligibility
@@ -116,8 +117,9 @@ def match_trials(
     patient_location = profile.get("location", "")
 
     # Query recruiting/active trials
+    # Use case-insensitive matching to handle different status formats
     query = db.query(ClinicalTrial).filter(
-        ClinicalTrial.status.in_(["Recruiting", "Active, not recruiting", "Enrolling by invitation"])
+        func.upper(ClinicalTrial.status).in_(["RECRUITING", "ACTIVE_NOT_RECRUITING", "ENROLLING_BY_INVITATION"])
     )
 
     trials = query.all()
