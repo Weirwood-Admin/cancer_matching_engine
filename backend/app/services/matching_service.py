@@ -1,5 +1,6 @@
 import logging
 from typing import Any, Optional
+from datetime import datetime, date
 from sqlalchemy.orm import Session
 from sqlalchemy import func, and_, or_
 from decimal import Decimal
@@ -576,3 +577,285 @@ def _generate_explanation(status: str, matching: list[str], excluding: list[str]
         if parts:
             return "; ".join(parts)
         return "Insufficient information for definitive assessment"
+
+
+def match_trials_structured(
+    profile: dict[str, Any],
+    db: Session,
+    max_results: int = MAX_V2_RESULTS,
+    relevance_categories: Optional[list[str]] = None
+) -> list[dict[str, Any]]:
+    """
+    Match clinical trials using structured profile from quiz with enhanced scoring.
+
+    This function extends match_trials_v2 with additional scoring for:
+    - Organ function requirements
+    - Prior malignancy exclusion
+    - Washout period compliance
+    - Enhanced location matching
+
+    Args:
+        profile: Patient profile dict from structured quiz
+        db: Database session
+        max_results: Maximum number of results to return
+        relevance_categories: NSCLC relevance categories to include
+
+    Returns:
+        List of trial matches with computed eligibility scores
+    """
+    if relevance_categories is None:
+        relevance_categories = DEFAULT_RELEVANCE_CATEGORIES
+
+    # Extract patient data (existing fields)
+    patient_biomarkers = profile.get("biomarkers", {})
+    patient_age = profile.get("age")
+    patient_ecog = profile.get("ecog_status")
+    patient_stage = profile.get("stage", "").upper() if profile.get("stage") else None
+    patient_histology = profile.get("histology", "").lower() if profile.get("histology") else None
+    patient_location = profile.get("location", "")
+    patient_prior_treatments = [t.lower() for t in profile.get("prior_treatments", [])]
+    patient_brain_mets = profile.get("brain_metastases")
+
+    # Extract NEW fields from structured quiz
+    patient_line_of_therapy = profile.get("line_of_therapy")
+    patient_brain_mets_status = profile.get("brain_mets_status")
+    patient_last_treatment_date = profile.get("last_treatment_date")
+    patient_prior_malignancy = profile.get("prior_malignancy")
+    patient_organ_issues = profile.get("organ_function_issues")
+    patient_travel_distance = profile.get("travel_distance_miles")
+
+    # PostgreSQL pre-filter for recruiting trials with structured eligibility
+    query = db.query(ClinicalTrial).filter(
+        func.upper(ClinicalTrial.status).in_(["RECRUITING", "ACTIVE_NOT_RECRUITING", "ENROLLING_BY_INVITATION"]),
+        ClinicalTrial.structured_eligibility.isnot(None)
+    )
+
+    # Filter by relevance
+    if relevance_categories:
+        query = query.filter(ClinicalTrial.nsclc_relevance.in_(relevance_categories))
+
+    # Get candidates
+    candidates = query.limit(500).all()
+
+    # Score each trial against patient profile with enhanced scoring
+    scored_matches = []
+    for trial in candidates:
+        score, reasons, excluding = _score_trial_match_structured(
+            trial=trial,
+            patient_biomarkers=patient_biomarkers,
+            patient_age=patient_age,
+            patient_ecog=patient_ecog,
+            patient_stage=patient_stage,
+            patient_histology=patient_histology,
+            patient_prior_treatments=patient_prior_treatments,
+            patient_brain_mets=patient_brain_mets,
+            patient_line_of_therapy=patient_line_of_therapy,
+            patient_brain_mets_status=patient_brain_mets_status,
+            patient_last_treatment_date=patient_last_treatment_date,
+            patient_prior_malignancy=patient_prior_malignancy,
+            patient_organ_issues=patient_organ_issues,
+        )
+
+        # Only include trials with positive score or unknown eligibility
+        if score >= 0:
+            # Determine eligibility status based on score
+            if score >= 0.7:
+                status = "eligible"
+            elif score >= 0.3 or (score == 0 and not excluding):
+                status = "uncertain"
+            else:
+                status = "ineligible"
+
+            # Filter locations if patient location provided
+            locations = trial.locations
+            if patient_location and locations:
+                patient_loc_lower = patient_location.lower()
+                locations = [
+                    loc for loc in locations
+                    if any(
+                        patient_loc_lower in str(loc.get(field, "")).lower()
+                        for field in ["city", "state", "country"]
+                    )
+                ]
+
+                # If filtering by location and no matches, still include but note it
+                if not locations and trial.locations:
+                    # Check state-level match if city didn't match
+                    for loc in trial.locations:
+                        loc_state = str(loc.get("state", "")).lower()
+                        loc_city = str(loc.get("city", "")).lower()
+                        if patient_loc_lower in loc_state or patient_loc_lower in loc_city:
+                            locations.append(loc)
+                            break
+
+            scored_matches.append({
+                "id": trial.id,
+                "nct_id": trial.nct_id,
+                "title": trial.title,
+                "phase": trial.phase,
+                "status": trial.status,
+                "sponsor": trial.sponsor,
+                "brief_summary": trial.brief_summary,
+                "biomarker_requirements": trial.biomarker_requirements,
+                "structured_eligibility": trial.structured_eligibility,
+                "nsclc_relevance": trial.nsclc_relevance,
+                "relevance_score": float(trial.relevance_score) if trial.relevance_score else None,
+                "eligibility": {
+                    "status": status,
+                    "confidence": min(1.0, score + 0.3) if score > 0 else 0.5,
+                    "matching_criteria": reasons,
+                    "excluding_criteria": excluding,
+                    "explanation": _generate_explanation(status, reasons, excluding)
+                },
+                "study_url": trial.study_url,
+                "locations": locations[:5] if locations else None,
+                "match_score": score
+            })
+
+    # Sort by eligibility status and score
+    status_order = {"eligible": 0, "uncertain": 1, "ineligible": 2}
+    scored_matches.sort(
+        key=lambda x: (
+            status_order.get(x["eligibility"]["status"], 1),
+            -x["match_score"]
+        )
+    )
+
+    return scored_matches[:max_results]
+
+
+def _score_trial_match_structured(
+    trial: ClinicalTrial,
+    patient_biomarkers: dict[str, list[str]],
+    patient_age: Optional[int],
+    patient_ecog: Optional[int],
+    patient_stage: Optional[str],
+    patient_histology: Optional[str],
+    patient_prior_treatments: list[str],
+    patient_brain_mets: Optional[bool],
+    patient_line_of_therapy: Optional[str],
+    patient_brain_mets_status: Optional[str],
+    patient_last_treatment_date: Optional[str],
+    patient_prior_malignancy: Optional[bool],
+    patient_organ_issues: Optional[bool],
+) -> tuple[float, list[str], list[str]]:
+    """
+    Enhanced scoring function for structured quiz data.
+
+    Extends _score_trial_match with scoring for:
+    - Organ function requirements
+    - Prior malignancy exclusion
+    - Washout period compliance
+    - Brain metastases status (stable vs active)
+    - Line of therapy matching
+
+    Returns: (score, matching_reasons, excluding_reasons)
+    """
+    # Start with base scoring from existing function
+    score, matching, excluding = _score_trial_match(
+        trial=trial,
+        patient_biomarkers=patient_biomarkers,
+        patient_age=patient_age,
+        patient_ecog=patient_ecog,
+        patient_stage=patient_stage,
+        patient_histology=patient_histology,
+        patient_prior_treatments=patient_prior_treatments,
+        patient_brain_mets=patient_brain_mets
+    )
+
+    eligibility = trial.structured_eligibility or {}
+
+    # Check prior malignancy
+    prior_malig_req = eligibility.get("prior_malignancy", {})
+    if patient_prior_malignancy and prior_malig_req.get("excluded", False):
+        excluding.append("Prior malignancy within exclusion window")
+        score -= 0.5  # Hard exclusion
+
+    # Check organ function
+    organ_req = eligibility.get("organ_function", {})
+    if patient_organ_issues:
+        if organ_req.get("renal_exclusion") or organ_req.get("hepatic_exclusion"):
+            excluding.append("Organ function issues may exclude")
+            score -= 0.4
+
+    # Check washout period
+    washout_req = eligibility.get("washout", {})
+    if patient_last_treatment_date and any([
+        washout_req.get("min_days_since_chemo"),
+        washout_req.get("min_days_since_radiation"),
+        washout_req.get("min_days_since_surgery"),
+        washout_req.get("min_days_since_immunotherapy"),
+        washout_req.get("general_min_days")
+    ]):
+        try:
+            last_treatment = datetime.fromisoformat(patient_last_treatment_date.replace('Z', '+00:00'))
+            if last_treatment.tzinfo:
+                last_treatment = last_treatment.replace(tzinfo=None)
+            days_since = (datetime.now() - last_treatment).days
+
+            # Get the most restrictive washout requirement
+            min_washout = washout_req.get("general_min_days") or 21  # Default 21 days
+            for key in ["min_days_since_chemo", "min_days_since_radiation",
+                       "min_days_since_surgery", "min_days_since_immunotherapy"]:
+                if washout_req.get(key) and washout_req[key] > min_washout:
+                    min_washout = washout_req[key]
+
+            if days_since < min_washout:
+                excluding.append(f"Washout period: {days_since} days since last treatment, need {min_washout}")
+                score -= 0.3
+            else:
+                matching.append(f"Washout period met ({days_since} days)")
+                score += 0.1
+        except (ValueError, TypeError):
+            pass  # Invalid date format, skip washout check
+
+    # Enhanced brain metastases status check
+    brain_req = eligibility.get("brain_metastases", {})
+    if patient_brain_mets_status:
+        if patient_brain_mets_status == "active":
+            if not brain_req.get("allowed", True):
+                excluding.append("Active brain metastases not allowed")
+                score -= 0.4
+            elif brain_req.get("controlled_only", False):
+                excluding.append("Active brain mets require treatment/stabilization")
+                score -= 0.3
+        elif patient_brain_mets_status == "stable":
+            if brain_req.get("allowed", True):
+                matching.append("Stable brain metastases allowed")
+                score += 0.15
+            elif brain_req.get("controlled_only", False):
+                matching.append("Controlled brain metastases meet requirement")
+                score += 0.2
+        elif patient_brain_mets_status == "none":
+            matching.append("No brain metastases")
+            score += 0.1
+
+    # Check line of therapy matching
+    treatment_req = eligibility.get("prior_treatments", {})
+    if patient_line_of_therapy:
+        max_lines = treatment_req.get("max_lines")
+        min_lines = treatment_req.get("min_lines")
+        treatment_naive_req = treatment_req.get("treatment_naive_required", False)
+
+        # Map line of therapy to numeric value
+        line_map = {"treatment_naive": 0, "1st": 1, "2nd": 2, "3rd+": 3}
+        patient_lines = line_map.get(patient_line_of_therapy, 0)
+
+        if treatment_naive_req and patient_lines > 0:
+            excluding.append("Treatment-naive patients only")
+            score -= 0.4
+        elif max_lines is not None and patient_lines > max_lines:
+            excluding.append(f"Max {max_lines} prior lines, patient has {patient_line_of_therapy}")
+            score -= 0.3
+        elif min_lines is not None and patient_lines < min_lines:
+            excluding.append(f"Min {min_lines} prior lines required")
+            score -= 0.2
+        else:
+            if max_lines is not None or min_lines is not None or treatment_naive_req:
+                matching.append(f"Line of therapy ({patient_line_of_therapy}) meets requirement")
+                score += 0.15
+
+    # Re-normalize score to 0-1 range
+    score = max(0.0, min(1.0, score))
+
+    return score, matching, excluding

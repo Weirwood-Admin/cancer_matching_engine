@@ -14,7 +14,7 @@ from app.schemas.matching import (
     EligibilityResult,
 )
 from app.services.claude_service import parse_patient_description
-from app.services.matching_service import match_treatments, match_trials, match_trials_v2
+from app.services.matching_service import match_treatments, match_trials, match_trials_v2, match_trials_structured
 
 logger = logging.getLogger(__name__)
 
@@ -254,6 +254,75 @@ def match_patient_v2(request: PatientMatchRequest, db: Session = Depends(get_db)
         raise
     except Exception as e:
         logger.error(f"Error in patient matching v2: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail="An error occurred during matching. Please try again."
+        )
+
+
+@router.post("/structured", response_model=PatientMatchResponse)
+def match_patient_structured(profile: PatientProfile, db: Session = Depends(get_db)):
+    """
+    Match using structured profile directly (no AI parsing).
+
+    This endpoint accepts a fully structured PatientProfile from the quiz form,
+    bypassing the Claude parsing step entirely. This is faster and cheaper than
+    /match or /match/v2 when data comes from structured input.
+
+    Use this endpoint when:
+    - Patient data comes from a structured quiz/form
+    - Speed is critical (no AI parsing overhead)
+    - Cost minimization is important (no Claude API calls)
+    """
+    start_time = time.time()
+
+    try:
+        # Convert profile to dict for matching services
+        profile_dict = profile.model_dump()
+
+        # Match treatments (rule-based)
+        treatment_matches = match_treatments(profile_dict, db)
+
+        # Match trials using structured matching with new scoring
+        trial_matches = match_trials_structured(profile_dict, db)
+
+        # Convert to response models
+        treatment_results = [
+            TreatmentMatch(**t) for t in treatment_matches
+        ]
+
+        trial_results = [
+            TrialMatch(
+                id=t["id"],
+                nct_id=t["nct_id"],
+                title=t["title"],
+                phase=t["phase"],
+                status=t["status"],
+                sponsor=t["sponsor"],
+                brief_summary=t["brief_summary"],
+                biomarker_requirements=t["biomarker_requirements"],
+                eligibility=EligibilityResult(**t["eligibility"]),
+                study_url=t["study_url"],
+                locations=t["locations"],
+            )
+            for t in trial_matches
+        ]
+
+        processing_time_ms = int((time.time() - start_time) * 1000)
+
+        return PatientMatchResponse(
+            profile=profile,
+            treatments=treatment_results,
+            trials=trial_results,
+            total_treatments=len(treatment_results),
+            total_trials=len(trial_results),
+            processing_time_ms=processing_time_ms,
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in structured patient matching: {e}")
         raise HTTPException(
             status_code=500,
             detail="An error occurred during matching. Please try again."

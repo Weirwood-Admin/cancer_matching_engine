@@ -20,7 +20,7 @@ client = Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
 MODEL = "claude-sonnet-4-20250514"
 
 # Current extraction version - increment when changing the extraction logic
-EXTRACTION_VERSION = "1.0.0"
+EXTRACTION_VERSION = "2.0.0"
 
 
 def extract_eligibility(
@@ -76,6 +76,25 @@ Extract structured eligibility criteria from the provided text. Return a JSON ob
     "controlled_only": boolean,
     "untreated_allowed": boolean
   },
+  "organ_function": {
+    "renal_exclusion": boolean (true if renal/kidney impairment excludes patient),
+    "hepatic_exclusion": boolean (true if hepatic/liver impairment excludes patient),
+    "creatinine_max": number or null (max creatinine level if specified),
+    "bilirubin_max": number or null (max bilirubin level if specified),
+    "notes": string or null (any specific lab requirements mentioned)
+  },
+  "prior_malignancy": {
+    "excluded": boolean (true if prior malignancy excludes patient),
+    "years_lookback": number or null (e.g., 5 for "no cancer in past 5 years"),
+    "exceptions": ["list of exceptions like 'basal cell skin cancer', 'in situ cervical cancer'"]
+  },
+  "washout": {
+    "min_days_since_chemo": number or null,
+    "min_days_since_radiation": number or null,
+    "min_days_since_surgery": number or null,
+    "min_days_since_immunotherapy": number or null,
+    "general_min_days": number or null (if general washout period mentioned without specifics)
+  },
   "common_exclusions": ["pregnancy", "active infection", etc.],
   "extraction_confidence": float 0-1,
   "extraction_notes": ["any important notes about uncertain extractions"]
@@ -89,6 +108,9 @@ Guidelines:
 - Disease stages: I, IA, IB, II, IIA, IIB, III, IIIA, IIIB, IIIC, IV, metastatic
 - Histology: adenocarcinoma, squamous cell carcinoma, large cell carcinoma, NOS (not otherwise specified)
 - Common exclusions: pregnancy, active infection, autoimmune disease, uncontrolled hypertension, cardiac disease
+- For washout periods: convert weeks to days (e.g., "4 weeks" = 28 days, "3 weeks" = 21 days)
+- For organ function: look for mentions of "adequate renal/hepatic function", creatinine clearance, AST/ALT limits, bilirubin
+- For prior malignancy: look for "no prior malignancy", "history of other cancer", years specified for exclusion window
 - Set extraction_confidence based on how clear the criteria are (0.9+ for clear, 0.5-0.8 for ambiguous)
 - Add notes for anything ambiguous or unclear
 
@@ -167,6 +189,25 @@ def _empty_eligibility(
             "controlled_only": False,
             "untreated_allowed": False
         },
+        "organ_function": {
+            "renal_exclusion": False,
+            "hepatic_exclusion": False,
+            "creatinine_max": None,
+            "bilirubin_max": None,
+            "notes": None
+        },
+        "prior_malignancy": {
+            "excluded": False,
+            "years_lookback": None,
+            "exceptions": []
+        },
+        "washout": {
+            "min_days_since_chemo": None,
+            "min_days_since_radiation": None,
+            "min_days_since_surgery": None,
+            "min_days_since_immunotherapy": None,
+            "general_min_days": None
+        },
         "common_exclusions": [],
         "extraction_confidence": confidence,
         "extraction_notes": notes or []
@@ -240,6 +281,34 @@ def _validate_and_fill_defaults(result: dict) -> dict:
 
     if not isinstance(result.get("extraction_notes"), list):
         result["extraction_notes"] = []
+
+    # Validate organ_function
+    if not isinstance(result.get("organ_function"), dict):
+        result["organ_function"] = defaults["organ_function"]
+    else:
+        result["organ_function"].setdefault("renal_exclusion", False)
+        result["organ_function"].setdefault("hepatic_exclusion", False)
+        result["organ_function"].setdefault("creatinine_max", None)
+        result["organ_function"].setdefault("bilirubin_max", None)
+        result["organ_function"].setdefault("notes", None)
+
+    # Validate prior_malignancy
+    if not isinstance(result.get("prior_malignancy"), dict):
+        result["prior_malignancy"] = defaults["prior_malignancy"]
+    else:
+        result["prior_malignancy"].setdefault("excluded", False)
+        result["prior_malignancy"].setdefault("years_lookback", None)
+        result["prior_malignancy"].setdefault("exceptions", [])
+
+    # Validate washout
+    if not isinstance(result.get("washout"), dict):
+        result["washout"] = defaults["washout"]
+    else:
+        result["washout"].setdefault("min_days_since_chemo", None)
+        result["washout"].setdefault("min_days_since_radiation", None)
+        result["washout"].setdefault("min_days_since_surgery", None)
+        result["washout"].setdefault("min_days_since_immunotherapy", None)
+        result["washout"].setdefault("general_min_days", None)
 
     # Ensure confidence is a valid float
     try:

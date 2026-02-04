@@ -47,45 +47,53 @@ export function Pagination({
   }
 
   return (
-    <nav className="flex items-center justify-center space-x-1">
+    <nav className="flex items-center justify-center gap-1">
       <button
         onClick={() => onPageChange(currentPage - 1)}
         disabled={currentPage === 1}
-        className="px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+        className="inline-flex items-center gap-1 px-4 py-2.5 text-sm font-medium text-gray-700 bg-white border-2 border-gray-200 rounded-xl hover:bg-gray-50 hover:border-gray-300 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
       >
+        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+        </svg>
         Previous
       </button>
 
-      {pages.map((page, index) => {
-        if (page < 0) {
-          return (
-            <span key={`ellipsis-${index}`} className="px-3 py-2 text-gray-500">
-              ...
-            </span>
-          );
-        }
+      <div className="flex items-center gap-1 mx-2">
+        {pages.map((page, index) => {
+          if (page < 0) {
+            return (
+              <span key={`ellipsis-${index}`} className="px-2 py-2 text-gray-400">
+                ...
+              </span>
+            );
+          }
 
-        return (
-          <button
-            key={page}
-            onClick={() => onPageChange(page)}
-            className={`px-3 py-2 text-sm font-medium rounded-md ${
-              page === currentPage
-                ? 'bg-emerald-600 text-white'
-                : 'text-gray-700 bg-white border border-gray-300 hover:bg-gray-50'
-            }`}
-          >
-            {page}
-          </button>
-        );
-      })}
+          return (
+            <button
+              key={page}
+              onClick={() => onPageChange(page)}
+              className={`min-w-[40px] px-3 py-2.5 text-sm font-medium rounded-xl transition-all ${
+                page === currentPage
+                  ? 'bg-gradient-to-r from-teal-500 to-emerald-500 text-white shadow-md shadow-teal-500/20'
+                  : 'text-gray-700 bg-white border-2 border-gray-200 hover:bg-gray-50 hover:border-gray-300'
+              }`}
+            >
+              {page}
+            </button>
+          );
+        })}
+      </div>
 
       <button
         onClick={() => onPageChange(currentPage + 1)}
         disabled={currentPage === totalPages}
-        className="px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+        className="inline-flex items-center gap-1 px-4 py-2.5 text-sm font-medium text-gray-700 bg-white border-2 border-gray-200 rounded-xl hover:bg-gray-50 hover:border-gray-300 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
       >
         Next
+        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+        </svg>
       </button>
     </nav>
   );

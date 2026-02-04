@@ -14,17 +14,30 @@ export function ParsedProfileCard({ profile }: ParsedProfileCardProps) {
     <div className="bg-white border border-gray-200 rounded-lg p-6">
       <h3 className="text-lg font-semibold text-gray-900 mb-4">Parsed Patient Profile</h3>
 
-      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
         <ProfileField label="Cancer Type" value={profile.cancer_type} />
         <ProfileField label="Histology" value={profile.histology} />
         <ProfileField label="Stage" value={profile.stage} />
         <ProfileField label="Age" value={profile.age?.toString()} />
         <ProfileField label="ECOG Status" value={profile.ecog_status?.toString()} />
+        <ProfileField label="Line of Therapy" value={profile.line_of_therapy} />
         <ProfileField
           label="Brain Metastases"
-          value={profile.brain_metastases === null ? null : profile.brain_metastases ? 'Yes' : 'No'}
+          value={profile.brain_mets_status || (profile.brain_metastases === null ? null : profile.brain_metastases ? 'Yes' : 'No')}
+        />
+        <ProfileField
+          label="Prior Malignancy"
+          value={profile.prior_malignancy === null ? null : profile.prior_malignancy ? 'Yes' : 'No'}
+        />
+        <ProfileField
+          label="Organ Function Issues"
+          value={profile.organ_function_issues === null ? 'Unknown' : profile.organ_function_issues ? 'Yes' : 'No'}
         />
         <ProfileField label="Location" value={profile.location} />
+        <ProfileField
+          label="Travel Distance"
+          value={profile.travel_distance_miles ? `${profile.travel_distance_miles} miles` : 'Any distance'}
+        />
       </div>
 
       {hasBiomarkers && (

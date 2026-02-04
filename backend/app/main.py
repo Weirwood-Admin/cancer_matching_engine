@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.database import engine, Base
-from app.routers import treatments, trials, centers, search, match
+from app.routers import treatments, trials, centers, search, match, competitor
 
 # Create database tables
 Base.metadata.create_all(bind=engine)
@@ -30,6 +30,7 @@ app.include_router(trials.router)
 app.include_router(centers.router)
 app.include_router(search.router)
 app.include_router(match.router)
+app.include_router(competitor.router)
 
 
 @app.get("/")
@@ -44,6 +45,7 @@ def root():
             "centers": "/centers",
             "search": "/search",
             "match": "/match",
+            "competitor": "/competitor",
             "docs": "/docs",
         },
     }

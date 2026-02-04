@@ -1,8 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import { api, PatientMatchResponse } from '@/lib/api';
-import { PatientMatchForm } from '@/components/match/PatientMatchForm';
+import { api, PatientMatchResponse, PatientProfile } from '@/lib/api';
+import { MatchQuiz } from '@/components/match/MatchQuiz';
 import { ParsedProfileCard } from '@/components/match/ParsedProfileCard';
 import { MatchResults } from '@/components/match/MatchResults';
 import { ErrorMessage } from '@/components/ErrorMessage';
@@ -11,35 +11,18 @@ export default function MatchPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [results, setResults] = useState<PatientMatchResponse | null>(null);
-  const [usedV2, setUsedV2] = useState(false);
 
-  const handleSubmit = async (description: string, location?: string) => {
+  const handleSubmit = async (profile: PatientProfile) => {
     setLoading(true);
     setError(null);
     setResults(null);
-    setUsedV2(false);
 
     try {
-      // Try v2 (fast) matching first
-      const response = await api.matchPatientV2({
-        description,
-        location,
-      });
+      const response = await api.matchPatientStructured(profile);
       setResults(response);
-      setUsedV2(true);
     } catch (err) {
-      // Fall back to v1 if v2 fails
-      console.warn('V2 matching failed, falling back to V1:', err);
-      try {
-        const response = await api.matchPatient({
-          description,
-          location,
-        });
-        setResults(response);
-      } catch (fallbackErr) {
-        const errorMessage = fallbackErr instanceof Error ? fallbackErr.message : 'Failed to find matches. Please try again.';
-        setError(errorMessage);
-      }
+      const errorMessage = err instanceof Error ? err.message : 'Failed to find matches. Please try again.';
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }
@@ -51,76 +34,104 @@ export default function MatchPage() {
   };
 
   return (
-    <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white">
       {/* Header */}
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">Find Treatment & Trial Matches</h1>
-        <p className="text-gray-600">
-          Describe a patient&apos;s condition in natural language and we&apos;ll find personalized
-          FDA-approved treatment options and clinical trial matches with eligibility pre-screening.
-        </p>
+      <div className="bg-gradient-to-r from-teal-600 via-emerald-600 to-teal-600 text-white">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12 text-center">
+          <div className="inline-flex items-center gap-2 px-3 py-1 bg-white/20 rounded-full text-sm font-medium mb-4">
+            <span className="w-2 h-2 rounded-full bg-emerald-300 animate-pulse"></span>
+            NSCLC Clinical Trial Matcher
+          </div>
+          <h1 className="text-3xl sm:text-4xl font-bold mb-3">
+            Find Trials You May Qualify For
+          </h1>
+          <p className="text-emerald-100 text-lg max-w-2xl mx-auto">
+            Answer a few questions to get a personalized list of clinical trials matched to your specific diagnosis
+          </p>
+        </div>
       </div>
 
       {/* Main Content */}
-      {!results ? (
-        <div className="bg-white border border-gray-200 rounded-lg p-6">
-          <PatientMatchForm onSubmit={handleSubmit} isLoading={loading} />
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
+        {!results ? (
+          <div className="-mt-6">
+            <MatchQuiz onSubmit={handleSubmit} isLoading={loading} />
 
-          {error && (
-            <div className="mt-6">
-              <ErrorMessage message={error} retry={() => setError(null)} />
-            </div>
-          )}
-        </div>
-      ) : (
-        <div className="space-y-6">
-          {/* Back/Reset Button */}
-          <button
-            onClick={handleReset}
-            className="inline-flex items-center text-sm text-emerald-600 hover:text-emerald-700 font-medium"
-          >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              fill="none"
-              viewBox="0 0 24 24"
-              strokeWidth={1.5}
-              stroke="currentColor"
-              className="w-4 h-4 mr-1"
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
-            </svg>
-            New Search
-          </button>
-
-          {/* Parsed Profile */}
-          <ParsedProfileCard profile={results.profile} />
-
-          {/* Match Results */}
-          <MatchResults
-            treatments={results.treatments}
-            trials={results.trials}
-            processingTimeMs={results.processing_time_ms}
-          />
-
-          {/* Show which matching method was used */}
-          <div className="text-xs text-gray-400 text-center">
-            {usedV2 ? (
-              <span>Fast matching (v2) - uses pre-extracted eligibility data</span>
-            ) : (
-              <span>Standard matching (v1) - uses AI eligibility evaluation</span>
+            {error && (
+              <div className="mt-6 max-w-3xl mx-auto">
+                <ErrorMessage message={error} retry={() => setError(null)} />
+              </div>
             )}
           </div>
-        </div>
-      )}
+        ) : (
+          <div className="space-y-6">
+            {/* Back Button */}
+            <button
+              onClick={handleReset}
+              className="inline-flex items-center gap-2 text-gray-600 hover:text-gray-900 font-medium transition-colors"
+            >
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+              </svg>
+              Start New Search
+            </button>
+
+            {/* Results Summary Card */}
+            <div className="bg-gradient-to-r from-emerald-500 to-teal-500 rounded-2xl p-6 text-white shadow-xl shadow-emerald-500/20">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-2xl font-bold mb-1">
+                    {results.total_trials} Trial{results.total_trials !== 1 ? 's' : ''} Found
+                  </h2>
+                  <p className="text-emerald-100">
+                    Plus {results.total_treatments} FDA-approved treatment option{results.total_treatments !== 1 ? 's' : ''}
+                  </p>
+                </div>
+                <div className="hidden sm:block">
+                  <div className="w-16 h-16 rounded-full bg-white/20 flex items-center justify-center">
+                    <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  </div>
+                </div>
+              </div>
+              <div className="mt-4 pt-4 border-t border-white/20 text-sm text-emerald-100">
+                Matched in {(results.processing_time_ms / 1000).toFixed(1)} seconds
+              </div>
+            </div>
+
+            {/* Parsed Profile */}
+            <ParsedProfileCard profile={results.profile} />
+
+            {/* Match Results */}
+            <MatchResults
+              treatments={results.treatments}
+              trials={results.trials}
+              processingTimeMs={results.processing_time_ms}
+            />
+          </div>
+        )}
+      </div>
 
       {/* Disclaimer */}
-      <div className="mt-8 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-        <p className="text-sm text-yellow-800">
-          <strong>Important:</strong> This tool provides informational guidance only and is not a substitute
-          for professional medical advice. Treatment decisions should always be made in consultation with
-          qualified healthcare providers. Eligibility assessments are preliminary and require verification
-          by clinical trial staff.
-        </p>
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 pb-12">
+        <div className="p-5 bg-amber-50 border border-amber-200 rounded-xl">
+          <div className="flex gap-3">
+            <div className="flex-shrink-0">
+              <svg className="w-5 h-5 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+            </div>
+            <div>
+              <h4 className="font-semibold text-amber-900 mb-1">Important Notice</h4>
+              <p className="text-sm text-amber-800">
+                This tool provides informational guidance only and is not medical advice. Treatment decisions
+                should be made with qualified healthcare providers. Eligibility assessments are preliminary
+                and require verification by clinical trial staff.
+              </p>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );

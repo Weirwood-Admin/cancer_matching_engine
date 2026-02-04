@@ -56,6 +56,28 @@ export interface BrainMetastasesRequirement {
   untreated_allowed: boolean;
 }
 
+export interface OrganFunctionRequirements {
+  renal_exclusion: boolean;
+  hepatic_exclusion: boolean;
+  creatinine_max: number | null;
+  bilirubin_max: number | null;
+  notes: string | null;
+}
+
+export interface PriorMalignancyRequirement {
+  excluded: boolean;
+  years_lookback: number | null;
+  exceptions: string[];
+}
+
+export interface WashoutRequirement {
+  min_days_since_chemo: number | null;
+  min_days_since_radiation: number | null;
+  min_days_since_surgery: number | null;
+  min_days_since_immunotherapy: number | null;
+  general_min_days: number | null;
+}
+
 export interface StructuredEligibility {
   age: AgeRequirement;
   ecog: ECOGRequirement;
@@ -64,6 +86,9 @@ export interface StructuredEligibility {
   biomarkers: BiomarkerRequirements;
   prior_treatments: PriorTreatmentRequirements;
   brain_metastases: BrainMetastasesRequirement;
+  organ_function: OrganFunctionRequirements;
+  prior_malignancy: PriorMalignancyRequirement;
+  washout: WashoutRequirement;
   common_exclusions: string[];
   extraction_confidence: number;
   extraction_notes: string[];
@@ -158,6 +183,13 @@ export interface PatientProfile {
   prior_treatments: string[];
   brain_metastases: boolean | null;
   location: string | null;
+  // NEW fields for structured quiz
+  line_of_therapy: string | null;  // "1st", "2nd", "3rd+", "treatment_naive"
+  brain_mets_status: string | null;  // "none", "stable", "active", "unknown"
+  last_treatment_date: string | null;  // ISO date for washout calculation
+  prior_malignancy: boolean | null;  // Other cancer in last 5 years
+  organ_function_issues: boolean | null;  // Known kidney/liver problems
+  travel_distance_miles: number | null;  // 25, 50, 100, 250, or null for any
 }
 
 export interface EligibilityResult {
@@ -220,6 +252,87 @@ export interface PatientMatchResponse {
 
 export interface ParsedProfileResponse {
   profile: PatientProfile;
+  raw_extraction: Record<string, unknown>;
+}
+
+// Competitor Analysis Types
+export interface ResearcherTrialProfile {
+  nct_id: string | null;
+  title: string | null;
+  phase: string | null;
+  target_biomarkers: Record<string, string[]>;
+  target_stages: string[];
+  target_histology: string[];
+  target_locations: string[];
+  age_range: [number, number] | null;
+  ecog_max: number | null;
+  treatment_naive_only: boolean | null;
+  prior_treatments_excluded: string[];
+}
+
+export interface CompetitorMatch {
+  nct_id: string;
+  title: string | null;
+  phase: string | null;
+  status: string | null;
+  sponsor: string | null;
+  similarity_score: number;
+  biomarker_overlap: number;
+  stage_overlap: number;
+  geographic_overlap: number;
+  phase_proximity: number;
+  eligibility_similarity: number;
+  overlapping_biomarkers: string[];
+  overlapping_stages: string[];
+  overlapping_locations: string[];
+  locations: Array<{
+    facility: string;
+    city: string;
+    state: string;
+    country: string;
+  }>;
+  study_url: string | null;
+  brief_summary: string | null;
+}
+
+export interface SponsorCount {
+  name: string;
+  count: number;
+}
+
+export interface GeographicHotspot {
+  state: string;
+  count: number;
+}
+
+export interface BiomarkerCount {
+  biomarker: string;
+  count: number;
+}
+
+export interface MarketInsights {
+  total_competing_trials: number;
+  top_sponsors: SponsorCount[];
+  geographic_hotspots: GeographicHotspot[];
+  phase_distribution: Record<string, number>;
+  common_biomarkers: BiomarkerCount[];
+  avg_similarity_score: number;
+}
+
+export interface CompetitorAnalysisResponse {
+  profile: ResearcherTrialProfile;
+  competitors: CompetitorMatch[];
+  insights: MarketInsights;
+  total_competitors: number;
+  processing_time_ms: number;
+}
+
+export interface NaturalLanguageRequest {
+  description: string;
+}
+
+export interface ParsedTrialResponse {
+  profile: ResearcherTrialProfile;
   raw_extraction: Record<string, unknown>;
 }
 
@@ -370,6 +483,22 @@ export const api = {
   matchPatientV2: (request: PatientMatchRequest) =>
     postApi<PatientMatchResponse, PatientMatchRequest>('/match/v2', request),
 
+  matchPatientStructured: (profile: PatientProfile) =>
+    postApi<PatientMatchResponse, PatientProfile>('/match/structured', profile),
+
   parsePatient: (request: PatientMatchRequest) =>
     postApi<ParsedProfileResponse, PatientMatchRequest>('/match/parse', request),
+
+  // Competitor Analysis
+  analyzeCompetitors: (profile: ResearcherTrialProfile) =>
+    postApi<CompetitorAnalysisResponse, ResearcherTrialProfile>('/competitor/analyze', profile),
+
+  analyzeCompetitorsNatural: (request: NaturalLanguageRequest) =>
+    postApi<CompetitorAnalysisResponse, NaturalLanguageRequest>('/competitor/analyze/natural', request),
+
+  analyzeCompetitorsByNctId: (nctId: string) =>
+    fetchApi<CompetitorAnalysisResponse>(`/competitor/analyze/${nctId}`),
+
+  parseTrialDescription: (request: NaturalLanguageRequest) =>
+    postApi<ParsedTrialResponse, NaturalLanguageRequest>('/competitor/parse', request),
 };

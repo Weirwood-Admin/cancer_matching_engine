@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
-from sqlalchemy import or_, func, case
+from sqlalchemy import or_, func, case, nullslast, Text
+from sqlalchemy.sql.expression import cast
 from typing import Optional
 from app.database import get_db
 from app.models import ClinicalTrial
@@ -188,7 +189,7 @@ def list_trials(
 
     if state:
         query = query.filter(
-            ClinicalTrial.locations.cast(str).ilike(f"%{state}%")
+            cast(ClinicalTrial.locations, Text).ilike(f"%{state}%")
         )
 
     if sponsor:
@@ -198,9 +199,9 @@ def list_trials(
         # Search in structured eligibility JSONB, biomarker_requirements, and raw text
         query = query.filter(
             or_(
-                ClinicalTrial.biomarker_requirements.cast(str).ilike(f"%{biomarker}%"),
+                cast(ClinicalTrial.biomarker_requirements, Text).ilike(f"%{biomarker}%"),
                 ClinicalTrial.eligibility_criteria.ilike(f"%{biomarker}%"),
-                ClinicalTrial.structured_eligibility.cast(str).ilike(f"%{biomarker}%"),
+                cast(ClinicalTrial.structured_eligibility, Text).ilike(f"%{biomarker}%"),
             )
         )
 
@@ -225,7 +226,7 @@ def list_trials(
     # Order by relevance score (if available) then by NCT ID
     items = (
         query.order_by(
-            ClinicalTrial.relevance_score.desc().nullslast(),
+            nullslast(ClinicalTrial.relevance_score.desc()),
             ClinicalTrial.nct_id.desc()
         )
         .offset((page - 1) * page_size)

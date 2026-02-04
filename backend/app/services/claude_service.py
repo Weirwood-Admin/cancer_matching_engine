@@ -90,6 +90,84 @@ Return only the JSON object, no other text."""
         raise
 
 
+def parse_trial_description(description: str) -> dict[str, Any]:
+    """
+    Parse a natural language clinical trial description into a structured profile.
+
+    Returns a dict matching the ResearcherTrialProfile schema.
+    """
+    system_prompt = """You are a clinical trial information extraction system specializing in NSCLC (non-small cell lung cancer) trials.
+
+Extract structured information from trial descriptions. Only extract what is explicitly stated - do not infer or assume values.
+
+Return a JSON object with these fields:
+- title: string or null (trial name/title if mentioned)
+- phase: string or null (e.g., "Phase 1", "Phase 2", "Phase 3", "Phase 1/Phase 2")
+- target_biomarkers: object mapping biomarker names to arrays of target mutations/alterations
+  Examples: {"EGFR": ["L858R", "T790M"], "ALK": ["positive"], "KRAS": ["G12C"]}
+  Common biomarkers: EGFR, ALK, ROS1, BRAF, KRAS, MET, RET, NTRK, HER2, PD-L1
+- target_stages: array of disease stages being recruited (e.g., ["III", "IIIA", "IIIB", "IV"])
+- target_histology: array of histology types (e.g., ["adenocarcinoma", "squamous cell carcinoma"])
+- target_locations: array of US states where the trial recruits (e.g., ["California", "Texas", "New York"])
+- age_range: [min, max] tuple or null (e.g., [18, 75])
+- ecog_max: integer 0-4 or null (maximum allowed ECOG performance status)
+- treatment_naive_only: boolean or null (true if trial only recruits treatment-naive patients)
+- prior_treatments_excluded: array of excluded prior treatments (e.g., ["EGFR TKI", "immunotherapy"])
+
+Important guidelines:
+- For biomarkers, capture the specific mutation/alteration if mentioned
+- Only include US states in target_locations, not cities or countries
+- Return null for any field not explicitly mentioned
+- Be conservative - only extract information that is clearly stated"""
+
+    user_message = f"""Extract the trial profile from this description:
+
+{description}
+
+Return only the JSON object, no other text."""
+
+    try:
+        response = client.messages.create(
+            model=MODEL,
+            max_tokens=1024,
+            system=system_prompt,
+            messages=[{"role": "user", "content": user_message}]
+        )
+
+        content = response.content[0].text.strip()
+
+        # Parse JSON - handle potential markdown code blocks
+        if content.startswith("```"):
+            lines = content.split("\n")
+            content = "\n".join(lines[1:-1] if lines[-1] == "```" else lines[1:])
+
+        result = json.loads(content)
+
+        # Ensure required fields have defaults
+        result.setdefault("target_biomarkers", {})
+        result.setdefault("target_stages", [])
+        result.setdefault("target_histology", [])
+        result.setdefault("target_locations", [])
+        result.setdefault("prior_treatments_excluded", [])
+
+        return result
+
+    except json.JSONDecodeError as e:
+        logger.error(f"Failed to parse Claude response as JSON: {e}")
+        logger.error(f"Raw response: {content}")
+        return {
+            "target_biomarkers": {},
+            "target_stages": [],
+            "target_histology": [],
+            "target_locations": [],
+            "prior_treatments_excluded": [],
+            "parse_error": str(e)
+        }
+    except Exception as e:
+        logger.error(f"Claude API error: {e}")
+        raise
+
+
 def evaluate_trial_eligibility(
     profile: dict[str, Any],
     eligibility_text: str,

@@ -86,6 +86,31 @@ class BrainMetastasesRequirement(BaseModel):
     )
 
 
+class OrganFunctionRequirements(BaseModel):
+    """Organ function/lab value requirements."""
+    renal_exclusion: bool = Field(False, description="Excludes patients with renal impairment")
+    hepatic_exclusion: bool = Field(False, description="Excludes patients with hepatic impairment")
+    creatinine_max: Optional[float] = Field(None, description="Max creatinine level if specified")
+    bilirubin_max: Optional[float] = Field(None, description="Max bilirubin level if specified")
+    notes: Optional[str] = None
+
+
+class PriorMalignancyRequirement(BaseModel):
+    """Prior malignancy exclusion requirements."""
+    excluded: bool = Field(False, description="Whether prior malignancy excludes patient")
+    years_lookback: Optional[int] = Field(None, description="Years to look back (e.g., 5 years)")
+    exceptions: list[str] = Field(default_factory=list, description="Exceptions (e.g., 'skin cancer')")
+
+
+class WashoutRequirement(BaseModel):
+    """Washout period requirements."""
+    min_days_since_chemo: Optional[int] = Field(None, description="Min days since chemotherapy")
+    min_days_since_radiation: Optional[int] = Field(None, description="Min days since radiation")
+    min_days_since_surgery: Optional[int] = Field(None, description="Min days since surgery")
+    min_days_since_immunotherapy: Optional[int] = Field(None, description="Min days since immunotherapy")
+    general_min_days: Optional[int] = Field(None, description="General washout if specific not mentioned")
+
+
 class StructuredEligibility(BaseModel):
     """
     Complete structured eligibility criteria extracted from free text.
@@ -112,6 +137,21 @@ class StructuredEligibility(BaseModel):
     # Health status
     brain_metastases: BrainMetastasesRequirement = Field(
         default_factory=BrainMetastasesRequirement
+    )
+
+    # Organ function requirements
+    organ_function: OrganFunctionRequirements = Field(
+        default_factory=OrganFunctionRequirements
+    )
+
+    # Prior malignancy exclusion
+    prior_malignancy: PriorMalignancyRequirement = Field(
+        default_factory=PriorMalignancyRequirement
+    )
+
+    # Washout period requirements
+    washout: WashoutRequirement = Field(
+        default_factory=WashoutRequirement
     )
 
     # Common exclusions

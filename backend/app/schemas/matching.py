@@ -1,10 +1,11 @@
 from pydantic import BaseModel, Field
 from typing import Optional, Literal
-from datetime import datetime
+from datetime import datetime, date
 
 
 class PatientProfile(BaseModel):
-    """Patient profile parsed from natural language description."""
+    """Patient profile parsed from natural language description or structured quiz."""
+    # Existing fields
     cancer_type: str = "NSCLC"
     histology: Optional[str] = None  # adenocarcinoma, squamous, large cell, etc.
     stage: Optional[str] = None  # I, II, IIIA, IIIB, IV, metastatic
@@ -14,6 +15,14 @@ class PatientProfile(BaseModel):
     prior_treatments: list[str] = Field(default_factory=list)
     brain_metastases: Optional[bool] = None
     location: Optional[str] = None  # city, state or region for trial matching
+
+    # NEW fields for 10 critical questions (structured quiz)
+    line_of_therapy: Optional[str] = None  # "1st", "2nd", "3rd+", "treatment_naive"
+    brain_mets_status: Optional[str] = None  # "none", "stable", "active", "unknown"
+    last_treatment_date: Optional[str] = None  # ISO date string for washout calculation
+    prior_malignancy: Optional[bool] = None  # Other cancer in last 5 years
+    organ_function_issues: Optional[bool] = None  # Known kidney/liver problems
+    travel_distance_miles: Optional[int] = None  # 25, 50, 100, 250, or None for any
 
 
 class PatientMatchRequest(BaseModel):

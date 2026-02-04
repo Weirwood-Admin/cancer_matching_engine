@@ -8,32 +8,43 @@ export function ErrorMessage({
   retry,
 }: ErrorMessageProps) {
   return (
-    <div className="text-center py-12">
-      <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-red-100 mb-4">
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          fill="none"
-          viewBox="0 0 24 24"
-          strokeWidth={1.5}
-          stroke="currentColor"
-          className="w-6 h-6 text-red-600"
-        >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z"
-          />
-        </svg>
+    <div className="bg-rose-50 border border-rose-200 rounded-xl p-6">
+      <div className="flex items-start gap-4">
+        <div className="flex-shrink-0">
+          <div className="w-10 h-10 rounded-full bg-rose-100 flex items-center justify-center">
+            <svg
+              className="w-5 h-5 text-rose-600"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+              />
+            </svg>
+          </div>
+        </div>
+        <div className="flex-1">
+          <h3 className="text-sm font-semibold text-rose-900 mb-1">
+            Error
+          </h3>
+          <p className="text-sm text-rose-800">{message}</p>
+          {retry && (
+            <button
+              onClick={retry}
+              className="mt-3 inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-rose-700 bg-rose-100 rounded-lg hover:bg-rose-200 transition-colors"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              Try again
+            </button>
+          )}
+        </div>
       </div>
-      <p className="text-gray-600 mb-4">{message}</p>
-      {retry && (
-        <button
-          onClick={retry}
-          className="px-4 py-2 text-sm font-medium text-white bg-emerald-600 rounded-md hover:bg-emerald-700"
-        >
-          Try again
-        </button>
-      )}
     </div>
   );
 }
