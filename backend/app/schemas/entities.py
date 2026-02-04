@@ -47,12 +47,20 @@ class ClinicalTrialBase(BaseModel):
 
 
 class ClinicalTrialCreate(ClinicalTrialBase):
-    pass
+    nsclc_relevance: Optional[str] = None
+    relevance_score: Optional[float] = None
 
 
 class ClinicalTrialResponse(ClinicalTrialBase):
     id: int
     last_updated: Optional[datetime] = None
+    # Relevance classification
+    nsclc_relevance: Optional[str] = None
+    relevance_score: Optional[float] = None
+    # Structured eligibility
+    structured_eligibility: Optional[dict[str, Any]] = None
+    eligibility_extraction_version: Optional[str] = None
+    eligibility_extracted_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True

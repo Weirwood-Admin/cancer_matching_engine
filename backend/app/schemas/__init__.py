@@ -20,3 +20,16 @@ from .entities import (
     SearchResult,
     PaginatedResponse,
 )
+
+# Eligibility schemas
+from .eligibility import (
+    StructuredEligibility,
+    StructuredEligibilityResponse,
+    EligibilityExtractionRequest,
+    AgeRequirement,
+    ECOGRequirement,
+    ListRequirement,
+    BiomarkerRequirements,
+    PriorTreatmentRequirements,
+    BrainMetastasesRequirement,
+)

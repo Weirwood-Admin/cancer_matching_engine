@@ -16,6 +16,59 @@ export interface Treatment {
   last_updated: string | null;
 }
 
+// Structured eligibility types
+export interface AgeRequirement {
+  min: number | null;
+  max: number | null;
+}
+
+export interface ECOGRequirement {
+  min: number | null;
+  max: number | null;
+}
+
+export interface ListRequirement {
+  allowed: string[];
+  excluded: string[];
+}
+
+export interface BiomarkerRequirements {
+  required_positive: Record<string, string[]>;
+  required_negative: string[];
+  pdl1_expression: {
+    min_tps?: number;
+    max_tps?: number;
+    level?: string;
+  } | null;
+}
+
+export interface PriorTreatmentRequirements {
+  required: string[];
+  excluded: string[];
+  max_lines: number | null;
+  min_lines: number | null;
+  treatment_naive_required: boolean;
+}
+
+export interface BrainMetastasesRequirement {
+  allowed: boolean;
+  controlled_only: boolean;
+  untreated_allowed: boolean;
+}
+
+export interface StructuredEligibility {
+  age: AgeRequirement;
+  ecog: ECOGRequirement;
+  disease_stage: ListRequirement;
+  histology: ListRequirement;
+  biomarkers: BiomarkerRequirements;
+  prior_treatments: PriorTreatmentRequirements;
+  brain_metastases: BrainMetastasesRequirement;
+  common_exclusions: string[];
+  extraction_confidence: number;
+  extraction_notes: string[];
+}
+
 export interface ClinicalTrial {
   id: number;
   nct_id: string;
@@ -40,6 +93,18 @@ export interface ClinicalTrial {
   contact_info: { name: string; phone: string; email: string } | null;
   study_url: string | null;
   last_updated: string | null;
+  // New fields
+  nsclc_relevance: string | null;
+  relevance_score: number | null;
+  structured_eligibility: StructuredEligibility | null;
+  eligibility_extraction_version: string | null;
+  eligibility_extracted_at: string | null;
+}
+
+export interface RelevanceStats {
+  total: number;
+  nsclc_relevant_count: number;
+  categories: Record<string, { count: number; percentage: number }>;
 }
 
 export interface CancerCenter {
@@ -132,6 +197,11 @@ export interface TrialMatch {
     state: string;
     country: string;
   }> | null;
+  // New fields from v2 matching
+  structured_eligibility?: StructuredEligibility | null;
+  nsclc_relevance?: string | null;
+  relevance_score?: number | null;
+  match_score?: number;
 }
 
 export interface PatientMatchRequest {
@@ -231,13 +301,22 @@ export const api = {
     sponsor?: string;
     biomarker?: string;
     search?: string;
-  }) => fetchApi<PaginatedResponse<ClinicalTrial>>('/trials', params),
+    relevance?: string;
+    include_all_relevance?: boolean;
+    has_structured_eligibility?: boolean;
+  }) => fetchApi<PaginatedResponse<ClinicalTrial>>('/trials', params as Record<string, string | number>),
 
   getTrial: (nctId: string) => fetchApi<ClinicalTrial>(`/trials/${nctId}`),
 
   getTrialPhases: () => fetchApi<string[]>('/trials/phases/list'),
 
   getTrialStatuses: () => fetchApi<string[]>('/trials/statuses/list'),
+
+  getTrialRelevanceCategories: () => fetchApi<string[]>('/trials/relevance/list'),
+
+  getTrialRelevanceStats: () => fetchApi<RelevanceStats>('/trials/stats/relevance'),
+
+  getTrialBiomarkers: () => fetchApi<string[]>('/trials/biomarkers/list'),
 
   getTrialLocations: (limit?: number) =>
     fetchApi<Array<{
@@ -287,6 +366,9 @@ export const api = {
   // Patient Matching
   matchPatient: (request: PatientMatchRequest) =>
     postApi<PatientMatchResponse, PatientMatchRequest>('/match', request),
+
+  matchPatientV2: (request: PatientMatchRequest) =>
+    postApi<PatientMatchResponse, PatientMatchRequest>('/match/v2', request),
 
   parsePatient: (request: PatientMatchRequest) =>
     postApi<ParsedProfileResponse, PatientMatchRequest>('/match/parse', request),

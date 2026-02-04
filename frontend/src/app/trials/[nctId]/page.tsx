@@ -7,6 +7,14 @@ import { api, ClinicalTrial } from '@/lib/api';
 import { LoadingSpinner } from '@/components/LoadingSpinner';
 import { ErrorMessage } from '@/components/ErrorMessage';
 import { LastUpdated } from '@/components/LastUpdated';
+import { StructuredEligibilityDisplay } from '@/components/trials/StructuredEligibility';
+
+const relevanceColors: Record<string, { bg: string; text: string; label: string }> = {
+  nsclc_specific: { bg: 'bg-green-100', text: 'text-green-800', label: 'NSCLC Specific' },
+  nsclc_primary: { bg: 'bg-blue-100', text: 'text-blue-800', label: 'NSCLC Primary' },
+  multi_cancer: { bg: 'bg-yellow-100', text: 'text-yellow-800', label: 'Multi-Cancer' },
+  solid_tumor: { bg: 'bg-orange-100', text: 'text-orange-800', label: 'Solid Tumor' },
+};
 
 export default function TrialDetailPage() {
   const params = useParams();
@@ -80,6 +88,11 @@ export default function TrialDetailPage() {
               {trial.status}
             </span>
           )}
+          {trial.nsclc_relevance && relevanceColors[trial.nsclc_relevance] && (
+            <span className={`px-3 py-1 text-sm font-medium rounded-full ${relevanceColors[trial.nsclc_relevance].bg} ${relevanceColors[trial.nsclc_relevance].text}`}>
+              {relevanceColors[trial.nsclc_relevance].label}
+            </span>
+          )}
         </div>
 
         <h1 className="text-2xl font-bold text-gray-900 mb-4">{trial.title}</h1>
@@ -120,16 +133,42 @@ export default function TrialDetailPage() {
           </div>
         )}
 
-        {trial.eligibility_criteria && (
+        {/* Structured Eligibility Display */}
+        {trial.structured_eligibility && (
           <div className="mt-6">
             <h3 className="text-sm font-medium text-gray-500 uppercase tracking-wide mb-2">
-              Eligibility Criteria
+              Eligibility Requirements
             </h3>
-            <div className="bg-gray-50 rounded-lg p-4 max-h-96 overflow-y-auto">
-              <pre className="text-sm text-gray-700 whitespace-pre-wrap font-sans">
-                {trial.eligibility_criteria}
-              </pre>
+            <div className="bg-white rounded-lg border border-gray-200 p-4">
+              <StructuredEligibilityDisplay
+                eligibility={trial.structured_eligibility}
+                showConfidence={true}
+              />
             </div>
+          </div>
+        )}
+
+        {/* Original Eligibility Criteria (collapsible) */}
+        {trial.eligibility_criteria && (
+          <div className="mt-6">
+            <details className="group">
+              <summary className="text-sm font-medium text-gray-500 uppercase tracking-wide mb-2 cursor-pointer hover:text-gray-700 list-none flex items-center gap-2">
+                <svg
+                  className="w-4 h-4 transition-transform group-open:rotate-90"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+                {trial.structured_eligibility ? 'View Original Eligibility Text' : 'Eligibility Criteria'}
+              </summary>
+              <div className="bg-gray-50 rounded-lg p-4 max-h-96 overflow-y-auto mt-2">
+                <pre className="text-sm text-gray-700 whitespace-pre-wrap font-sans">
+                  {trial.eligibility_criteria}
+                </pre>
+              </div>
+            </details>
           </div>
         )}
 

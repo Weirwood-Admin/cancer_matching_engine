@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { api, ClinicalTrial, PaginatedResponse } from '@/lib/api';
+import { api, ClinicalTrial, PaginatedResponse, RelevanceStats } from '@/lib/api';
 import { Card } from '@/components/Card';
 import { FilterSelect } from '@/components/FilterSelect';
 import { Pagination } from '@/components/Pagination';
@@ -19,10 +19,26 @@ const US_STATES = [
   'Wisconsin', 'Wyoming',
 ];
 
+const RELEVANCE_OPTIONS = [
+  { value: 'nsclc_specific,nsclc_primary', label: 'NSCLC Focused (Default)' },
+  { value: 'nsclc_specific', label: 'NSCLC Specific Only' },
+  { value: 'nsclc_specific,nsclc_primary,multi_cancer', label: 'Include Multi-Cancer' },
+  { value: 'all', label: 'All Trials' },
+];
+
+const relevanceColors: Record<string, { bg: string; text: string }> = {
+  nsclc_specific: { bg: 'bg-green-100', text: 'text-green-800' },
+  nsclc_primary: { bg: 'bg-blue-100', text: 'text-blue-800' },
+  multi_cancer: { bg: 'bg-yellow-100', text: 'text-yellow-800' },
+  solid_tumor: { bg: 'bg-orange-100', text: 'text-orange-800' },
+};
+
 export default function TrialsPage() {
   const [data, setData] = useState<PaginatedResponse<ClinicalTrial> | null>(null);
   const [phases, setPhases] = useState<string[]>([]);
   const [statuses, setStatuses] = useState<string[]>([]);
+  const [biomarkers, setBiomarkers] = useState<string[]>([]);
+  const [relevanceStats, setRelevanceStats] = useState<RelevanceStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -32,6 +48,8 @@ export default function TrialsPage() {
   const [status, setStatus] = useState('');
   const [state, setState] = useState('');
   const [search, setSearch] = useState('');
+  const [biomarker, setBiomarker] = useState('');
+  const [relevance, setRelevance] = useState('nsclc_specific,nsclc_primary');
 
   const fetchData = async () => {
     setLoading(true);
@@ -44,6 +62,9 @@ export default function TrialsPage() {
         status: status || undefined,
         state: state || undefined,
         search: search || undefined,
+        biomarker: biomarker || undefined,
+        relevance: relevance === 'all' ? undefined : relevance || undefined,
+        include_all_relevance: relevance === 'all',
       });
       setData(result);
     } catch (err) {
@@ -56,13 +77,20 @@ export default function TrialsPage() {
 
   useEffect(() => {
     fetchData();
-  }, [page, phase, status, state]);
+  }, [page, phase, status, state, biomarker, relevance]);
 
   useEffect(() => {
-    Promise.all([api.getTrialPhases(), api.getTrialStatuses()])
-      .then(([p, s]) => {
+    Promise.all([
+      api.getTrialPhases(),
+      api.getTrialStatuses(),
+      api.getTrialBiomarkers(),
+      api.getTrialRelevanceStats().catch(() => null),
+    ])
+      .then(([p, s, b, r]) => {
         setPhases(p);
         setStatuses(s);
+        setBiomarkers(b);
+        if (r) setRelevanceStats(r);
       })
       .catch(console.error);
   }, []);
@@ -124,7 +152,7 @@ export default function TrialsPage() {
           </div>
         </form>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
           <FilterSelect
             label="Phase"
             value={phase}
@@ -157,7 +185,57 @@ export default function TrialsPage() {
             }}
             placeholder="All states"
           />
+
+          <FilterSelect
+            label="Biomarker"
+            value={biomarker}
+            options={biomarkers}
+            onChange={(value) => {
+              setBiomarker(value);
+              setPage(1);
+            }}
+            placeholder="Any biomarker"
+          />
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Relevance
+            </label>
+            <select
+              value={relevance}
+              onChange={(e) => {
+                setRelevance(e.target.value);
+                setPage(1);
+              }}
+              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+            >
+              {RELEVANCE_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
+
+        {/* Relevance Stats */}
+        {relevanceStats && (
+          <div className="mt-4 pt-4 border-t border-gray-200">
+            <p className="text-xs text-gray-500 mb-2">Trial breakdown by relevance:</p>
+            <div className="flex flex-wrap gap-2">
+              {Object.entries(relevanceStats.categories).map(([category, stats]) => (
+                <span
+                  key={category}
+                  className={`px-2 py-0.5 text-xs rounded-full ${
+                    relevanceColors[category]?.bg || 'bg-gray-100'
+                  } ${relevanceColors[category]?.text || 'text-gray-600'}`}
+                >
+                  {category.replace('_', ' ')}: {stats.count} ({stats.percentage}%)
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Results */}
@@ -186,6 +264,18 @@ export default function TrialsPage() {
                   ...(trial.status
                     ? [{ label: trial.status, color: getStatusColor(trial.status) }]
                     : []),
+                  ...(trial.nsclc_relevance && relevanceColors[trial.nsclc_relevance]
+                    ? [{
+                        label: trial.nsclc_relevance.replace('_', ' '),
+                        color: trial.nsclc_relevance === 'nsclc_specific' ? 'green'
+                          : trial.nsclc_relevance === 'nsclc_primary' ? 'blue'
+                          : trial.nsclc_relevance === 'multi_cancer' ? 'yellow'
+                          : 'orange'
+                      }]
+                    : []),
+                  ...(trial.structured_eligibility
+                    ? [{ label: 'Structured', color: 'emerald' }]
+                    : []),
                 ]}
                 meta={[
                   ...(trial.sponsor
@@ -193,6 +283,12 @@ export default function TrialsPage() {
                     : []),
                   ...(trial.locations && trial.locations.length > 0
                     ? [{ label: 'Locations', value: `${trial.locations.length} sites` }]
+                    : []),
+                  ...(trial.structured_eligibility?.biomarkers?.required_positive
+                    ? [{
+                        label: 'Biomarkers',
+                        value: Object.keys(trial.structured_eligibility.biomarkers.required_positive).join(', ') || 'None specified'
+                      }]
                     : []),
                 ]}
               />

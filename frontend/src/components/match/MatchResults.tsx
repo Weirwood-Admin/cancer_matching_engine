@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { TreatmentMatch, TrialMatch, EligibilityResult } from '@/lib/api';
+import { TreatmentMatch, TrialMatch, EligibilityResult, StructuredEligibility } from '@/lib/api';
 
 interface MatchResultsProps {
   treatments: TreatmentMatch[];
@@ -111,10 +111,18 @@ function TreatmentCard({ treatment }: { treatment: TreatmentMatch }) {
   );
 }
 
+const relevanceColors: Record<string, { bg: string; text: string }> = {
+  nsclc_specific: { bg: 'bg-green-50', text: 'text-green-700' },
+  nsclc_primary: { bg: 'bg-blue-50', text: 'text-blue-700' },
+  multi_cancer: { bg: 'bg-yellow-50', text: 'text-yellow-700' },
+  solid_tumor: { bg: 'bg-orange-50', text: 'text-orange-700' },
+};
+
 function TrialCard({ trial }: { trial: TrialMatch }) {
   const eligibility = trial.eligibility;
   const colors = eligibilityColors[eligibility.status];
   const confidencePercent = Math.round(eligibility.confidence * 100);
+  const structured = trial.structured_eligibility;
 
   return (
     <div className="bg-white border border-gray-200 rounded-lg p-4 hover:shadow-md transition-all">
@@ -128,6 +136,11 @@ function TrialCard({ trial }: { trial: TrialMatch }) {
           {trial.status && (
             <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-blue-100 text-blue-800">
               {trial.status}
+            </span>
+          )}
+          {trial.nsclc_relevance && relevanceColors[trial.nsclc_relevance] && (
+            <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${relevanceColors[trial.nsclc_relevance].bg} ${relevanceColors[trial.nsclc_relevance].text}`}>
+              {trial.nsclc_relevance.replace('_', ' ')}
             </span>
           )}
         </div>
@@ -146,6 +159,30 @@ function TrialCard({ trial }: { trial: TrialMatch }) {
 
       {trial.brief_summary && (
         <p className="text-sm text-gray-600 mb-3 line-clamp-2">{trial.brief_summary}</p>
+      )}
+
+      {/* Quick biomarker badges */}
+      {structured?.biomarkers?.required_positive && Object.keys(structured.biomarkers.required_positive).length > 0 && (
+        <div className="flex flex-wrap gap-1 mb-3">
+          {Object.entries(structured.biomarkers.required_positive).slice(0, 4).map(([biomarker, mutations]) => (
+            <span
+              key={biomarker}
+              className="px-2 py-0.5 text-xs font-medium rounded bg-emerald-50 text-emerald-700 border border-emerald-200"
+              title={`Required: ${mutations.join(', ')}`}
+            >
+              {biomarker}+
+            </span>
+          ))}
+          {structured.biomarkers.required_negative.slice(0, 2).map((biomarker) => (
+            <span
+              key={biomarker}
+              className="px-2 py-0.5 text-xs font-medium rounded bg-gray-50 text-gray-600 border border-gray-200"
+              title="Must be negative"
+            >
+              {biomarker}-
+            </span>
+          ))}
+        </div>
       )}
 
       {/* Eligibility Explanation */}

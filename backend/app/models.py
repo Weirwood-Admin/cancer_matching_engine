@@ -42,6 +42,15 @@ class ClinicalTrial(Base):
     study_url = Column(String(500))
     last_updated = Column(DateTime, server_default=func.now(), onupdate=func.now())
 
+    # NEW: Relevance classification for NSCLC specificity
+    nsclc_relevance = Column(String(20), index=True)  # nsclc_specific, nsclc_primary, multi_cancer, solid_tumor
+    relevance_score = Column(DECIMAL(3, 2))  # 0.00 to 1.00
+
+    # NEW: Structured eligibility extracted from free text
+    structured_eligibility = Column(JSONB)
+    eligibility_extraction_version = Column(String(20))
+    eligibility_extracted_at = Column(DateTime)
+
 
 class CancerCenter(Base):
     __tablename__ = "cancer_centers"

@@ -11,21 +11,35 @@ export default function MatchPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [results, setResults] = useState<PatientMatchResponse | null>(null);
+  const [usedV2, setUsedV2] = useState(false);
 
   const handleSubmit = async (description: string, location?: string) => {
     setLoading(true);
     setError(null);
     setResults(null);
+    setUsedV2(false);
 
     try {
-      const response = await api.matchPatient({
+      // Try v2 (fast) matching first
+      const response = await api.matchPatientV2({
         description,
         location,
       });
       setResults(response);
+      setUsedV2(true);
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to find matches. Please try again.';
-      setError(errorMessage);
+      // Fall back to v1 if v2 fails
+      console.warn('V2 matching failed, falling back to V1:', err);
+      try {
+        const response = await api.matchPatient({
+          description,
+          location,
+        });
+        setResults(response);
+      } catch (fallbackErr) {
+        const errorMessage = fallbackErr instanceof Error ? fallbackErr.message : 'Failed to find matches. Please try again.';
+        setError(errorMessage);
+      }
     } finally {
       setLoading(false);
     }
@@ -87,6 +101,15 @@ export default function MatchPage() {
             trials={results.trials}
             processingTimeMs={results.processing_time_ms}
           />
+
+          {/* Show which matching method was used */}
+          <div className="text-xs text-gray-400 text-center">
+            {usedV2 ? (
+              <span>Fast matching (v2) - uses pre-extracted eligibility data</span>
+            ) : (
+              <span>Standard matching (v1) - uses AI eligibility evaluation</span>
+            )}
+          </div>
         </div>
       )}
 
